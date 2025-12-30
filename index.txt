@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>像素风寓言：铁杵磨成针</title>
+    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #2c2a4a;
+            --ui-bg: #4f4789;
+            --ui-border: #f5d76e;
+            --text-color: #ffffff;
+            --highlight: #f7ca18;
+            --danger: #e74c3c;
+            --success: #2ecc71;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-dark);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'DotGothic16', sans-serif;
+            overflow: hidden;
+            color: white;
+            user-select: none;
+        }
+
+        #game-container {
+            width: 960px;
+            height: 540px;
+            background-color: #000;
+            position: relative;
+            box-shadow: 0 0 60px rgba(0,0,0,0.8);
+            border: 4px solid var(--ui-border);
+            display: flex;
+            flex-direction: column;
+            image-rendering: pixelated;
+        }
+
+        /* --- 场景层 --- */
+        #scene-layer {
+            flex: 1;
+            height: 75%;
+            position: relative;
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+            border-bottom: 4px solid var(--ui-border);
+            background-color: #87CEEB;
+            transition: background-image 0.5s;
+        }
+
+        /* 角色通用 */
+        .sprite {
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 85%;
+            width: auto;
+            z-index: 20;
+            filter: drop-shadow(4px 4px 0px rgba(0,0,0,0.3));
+            transition: all 0.3s;
+        }
+        
+        .sub-sprite { 
+            position: absolute; 
+            bottom: -10px; 
+            height: 70%; 
+            width: auto; 
+            filter: drop-shadow(4px 4px 0 rgba(0,0,0,0.5)); 
+            transition: all 0.5s ease-in-out;
+        }
+
+
+        /* 章节标题动画 */
+        #chapter-title {
+            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 80px; color: #fff; text-shadow: 4px 4px 0 #3E2723, -2px -2px 0 #5D4037;
+            z-index: 100; opacity: 0; pointer-events: none; white-space: nowrap;
+        }
+        .anim-title-show { animation: titleFade 2s forwards ease-in-out; }
+        @keyframes titleFade { 0% { opacity: 0; transform: translate(-50%, -40%); } 20% { opacity: 1; transform: translate(-50%, -50%); } 80% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -60%); } }
+
+        /* 角色动画定义 */
+        .anim-idle { animation: breathe 3s infinite ease-in-out; }
+        .anim-shake { animation: shake 0.3s infinite; }
+        .anim-run-out { animation: runOut 0.8s forwards ease-in; }
+        .anim-run-back { animation: runBack 1.2s forwards ease-out; }
+        .anim-grind { animation: grind 1s infinite steps(2); }
+        .anim-think { animation: think 4s infinite ease-in-out; }
+
+        @keyframes breathe { 0% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.02); } 100% { transform: translateX(-50%) scale(1); } }
+        @keyframes shake { 0% { transform: translateX(-51%); } 50% { transform: translateX(-49%); } 100% { transform: translateX(-51%); } }
+        @keyframes runOut { to { left: -20%; opacity: 0; } }
+        @keyframes runBack { from { left: -20%; } to { left: 50%; } }
+        @keyframes grind { 0% { transform: translate(-50%, 0); } 50% { transform: translate(-50%, -5px) rotate(1deg); } 100% { transform: translate(-50%, 0); } }
+        @keyframes think { 0%, 100% { transform: translateX(-50%); } 25% { transform: translateX(-51%); } 75% { transform: translateX(-49%); } }
+        
+
+        /* --- UI层 --- */
+        #ui-layer { height: 140px; background-color: var(--ui-bg); display: flex; padding: 10px 15px; box-sizing: border-box; gap: 15px; position: relative; flex-shrink: 0; z-index: 30; }
+        #portrait-frame { height: 100%; aspect-ratio: 1 / 1; background: #2d2436; border: 3px solid var(--ui-border); flex-shrink: 0; display: flex; justify-content: center; align-items: center; border-radius: 4px; }
+        #portrait-img { width: 85%; height: 85%; object-fit: contain; }
+        #dialogue-area { flex-grow: 1; display: flex; flex-direction: column; position: relative; padding-right: 40px; }
+        #name-tag { background-color: var(--highlight); color: #3e2723; padding: 4px 10px; border-radius: 2px; font-size: 16px; font-weight: bold; width: fit-content; margin-bottom: 5px; border: 1px solid #fff; }
+        #text-content { font-size: 18px; line-height: 1.6; color: #f0f0f0; text-shadow: 2px 2px 0 #000; }
+        #choices-box { position: absolute; bottom: 0; right: 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 50; }
+        .pixel-btn { background: #fff; color: #333; border: 2px solid #555; padding: 6px 14px; font-family: inherit; font-size: 16px; cursor: pointer; box-shadow: 0 4px 0 #333; text-align: right; transition: all 0.2s; }
+        .pixel-btn:hover { background: #ffeb3b; transform: translateY(-2px); border-color: #fbc02d; color: #000; }
+        
+        #restart-btn {
+            position: absolute; top: 0; right: 0;
+            background: transparent; border: none; color: #aaa;
+            font-size: 24px; cursor: pointer; transition: all 0.5s ease; width: 30px; height: 30px; display: flex; justify-content: center; align-items: center;
+        }
+        #restart-btn:hover { color: #ff5252; transform: rotate(360deg) scale(1.2); }
+        .next-indicator { position: absolute; bottom: 5px; right: 5px; width: 12px; height: 12px; background: #fff; clip-path: polygon(0 0, 0% 100%, 100% 50%); animation: blink 1s infinite; cursor: pointer; }
+        @keyframes blink { 0%,100% {opacity:1} 50% {opacity:0.3} }
+
+        #status-bar { position: absolute; top: 20px; right: 20px; display: none; gap: 15px; z-index: 50; }
+        .stat-box { background: rgba(0, 0, 0, 0.7); border: 2px solid #fff; padding: 8px 16px; border-radius: 4px; display: flex; align-items: center; gap: 10px; font-size: 24px; position: relative; }
+        .stat-value { color: var(--highlight); font-weight: bold; min-width: 40px; text-align: right; }
+        .stat-change { position: absolute; top: 100%; right: 0; font-weight: bold; font-size: 20px; opacity: 0; pointer-events: none; }
+        .change-anim { animation: floatUp 1.5s forwards; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-30px); } }
+
+        #multi-char-layer { position: absolute; width: 100%; height: 100%; top: 0; left: 0; pointer-events: none; display: none; z-index: 25; }
+
+        .bubble {
+            position: absolute; top: 20%; left: 55%;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            border-radius: 10px;
+            padding: 15px;
+            max-width: 300px;
+            border: 2px solid #555;
+            font-size: 16px;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+            opacity: 0;
+            display: none;
+        }
+        .bubble::after {
+            content: ''; position: absolute; bottom: -10px; left: 30px;
+            width: 0; height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 15px solid rgba(255, 255, 255, 0.9);
+        }
+        .anim-bubble-show { animation: popIn 0.4s forwards, fadeOut 4s 1s forwards; }
+        @keyframes popIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes fadeOut { 0% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+        /* 结局淡入淡出 */
+        #ending-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            z-index: 200; display: none; justify-content: center; align-items: center;
+            opacity: 0; transition: opacity 1s;
+        }
+        #ending-text {
+            color: white; font-size: 24px; text-align: center; line-height: 1.8;
+            max-width: 80%; text-shadow: 2px 2px 4px #000;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="status-bar">
+        <div class="stat-box">
+            <span class="stat-icon">⏳</span>
+            <span class="stat-text">耐心值:</span>
+            <span id="patience-val" class="stat-value">50</span>
+            <span id="patience-change" class="stat-change"></span>
+        </div>
+    </div>
+
+    <!-- 场景层 -->
+    <div id="scene-layer">
+        <div id="chapter-title"></div>
+
+        <img id="main-char" src="" class="sprite anim-idle" style="display:none;">
+        <div id="multi-char-layer">
+            <img id="extra-char-1" class="sub-sprite" style="display:none;">
+        </div>
+        
+        <div id="thought-bubble" class="bubble"></div>
+
+        <div id="ending-layer">
+            <p id="ending-text"></p>
+        </div>
+    </div>
+
+    <div id="ui-layer">
+        <div id="portrait-frame" style="visibility: hidden;">
+            <img id="portrait-img" src="">
+        </div>
+
+        <div id="dialogue-area">
+            <button id="restart-btn" onclick="restartGame()" title="重新开始">↻</button>
+            <div id="name-tag">系统</div>
+            <div id="text-content">...</div>
+            <div id="choices-box"></div>
+            <div id="next-btn" class="next-indicator" style="display:none;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const svgToUrl = (svg) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+
+    // --- 资源定义 (SVG) ---
+
+    // 背景
+    const bgClassroom = `<svg width="960" height="540" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect width="960" height="540" fill="#f0e4d7"/><rect x="50" y="50" width="860" height="440" fill="#d7c3a9"/><rect x="60" y="60" width="840" height="420" fill="#c3b39c"/><rect x="0" y="400" width="960" height="140" fill="#7d6a55"/><path d="M0 420 H960 M0 450 H960 M0 480 H960" stroke="#5f4a38" stroke-width="2"/><rect x="80" y="80" width="200" height="300" fill="#5f4a38"/><path d="M90 90 H270 M90 120 H270 M90 150 H270 M90 180 H270 M90 210 H270" stroke="#f0e4d7" stroke-width="2" opacity="0.3"/><rect x="700" y="80" width="200" height="300" fill="#5f4a38"/><path d="M710 90 H890 M710 120 H890 M710 150 H890 M710 180 H890 M710 210 H890" stroke="#f0e4d7" stroke-width="2" opacity="0.3"/><text x="480" y="150" font-size="60" font-family="monospace" text-anchor="middle" fill="#3e2723">寓言课堂</text></svg>`;
+    const bgAcademy = `<svg width="960" height="540" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect width="960" height="540" fill="#f5e6d0"/><rect x="0" y="380" width="960" height="160" fill="#8d6e63"/><path d="M0 400 H960 M0 430 H960 M0 460 H960 M0 490 H960" stroke="#6d4c41" stroke-width="2"/><rect x="650" y="80" width="250" height="300" fill="#795548"/><path d="M660 90 h230 v280 h-230 z" fill="none" stroke="#fff" stroke-width="4"/><path d="M660 230 h230 m-115 -140 v280" stroke="#fff" stroke-width="4"/><circle cx="50" cy="50" r="30" fill="#FFD700" opacity="0.7"/><rect x="300" y="400" width="100" height="80" fill="#a1887f"/><rect x="320" y="360" width="60" height="40" fill="#6d4c41"/><rect x="340" y="380" width="20" height="20" fill="#f5e6d0"/><text x="150" y="320" font-family="monospace" font-size="30" fill="#5d4037">子曰：学而时习之</text></svg>`;
+    const bgStream = `<svg width="960" height="540" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect width="960" height="540" fill="#87ceeb"/><path d="M0 540 C 320 400, 640 600, 960 450 V 540 H0 Z" fill="#a5d6a7"/><path d="M-50 540 C 200 450, 500 550, 960 480 V 540 H-50 Z" fill="#66bb6a"/><path d="M-50 540 C 100 500, 300 540, 600 510 L 960 540 H -50 Z" fill="#4caf50"/><path d="M200 400 h20 v20 h-20z m40 20 h20 v20 h-20z m-20 20 h20 v20 h-20z" fill="#9e9e9e"/><rect x="180" y="380" width="120" height="100" fill="#757575"/><rect x="200" y="400" width="80" height="60" fill="#e0e0e0"/><path d="M-10 350 H 970" stroke="#64b5f6" stroke-width="20"/><path d="M-10 350 H 970" stroke="#ffffff" stroke-width="10" stroke-dasharray="20 10" opacity="0.5"/></svg>`;
+
+    // 角色
+    const youngLiBaiBase = (face, book = false) => {
+        const bookSvg = book ? `<rect x="45" y="30" width="10" height="15" fill="#5D4037" /><rect x="46" y="31" width="8" height="13" fill="#F5E6D0" />` : '';
+        return `<svg width="300" height="400" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g transform="translate(0, 10)"><rect x="20" y="18" width="24" height="28" fill="#5c6bc0"/><rect x="18" y="16" width="28" height="6" fill="#1a237e"/><rect x="24" y="10" width="16" height="8" fill="#263238"/><path d="M24 10 L20 16" stroke="#263238" stroke-width="2"/><path d="M40 10 L44 16" stroke="#263238" stroke-width="2"/><rect x="26" y="18" width="12" height="10" fill="#ffccbc"/>${face}<rect x="16" y="24" width="4" height="12" fill="#ffccbc"/><rect x="44" y="24" width="4" height="12" fill="#ffccbc"/><rect x="22" y="46" width="8" height="10" fill="#4527a0"/><rect x="34" y="46" width="8" height="10" fill="#4527a0"/>${bookSvg}</g></svg>`;
+    };
+
+    const faceIdle = `<rect x="29" y="22" width="2" height="2" fill="#000"/><rect x="33" y="22" width="2" height="2" fill="#000"/><rect x="30" y="25" width="4" height="1" fill="#000"/>`;
+    const faceAnnoyed = `<rect x="29" y="22" width="2" height="2" fill="#000"/><rect x="33" y="22" width="2" height="2" fill="#000"/><path d="M29 25 h6" stroke="#000" stroke-width="1.5"/>`;
+    const faceLaugh = `<rect x="29" y="22" width="2" height="2" fill="#000"/><rect x="33" y="22" width="2" height="2" fill="#000"/><path d="M29 24 a 3 2 0 0 0 6 0" fill="#FFF" stroke="#000" stroke-width="1"/>`;
+    const faceSurprised = `<rect x="29" y="22" width="2" height="2" fill="#000"/><rect x="33" y="22" width="2" height="2" fill="#000"/><circle cx="32" cy="26" r="2" fill="#000"/>`;
+    const faceDetermined = `<path d="M28 21 h4 l-1 3 h-2 z" fill="#000"/><path d="M32 21 h4 l-1 3 h-2 z" fill="#000"/><rect x="30" y="25" width="4" height="1.5" fill="#000"/>`;
+    const faceAshamed = `<rect x="29" y="22" width="2" height="2" fill="#000"/><rect x="33" y="22" width="2" height="2" fill="#000"/><path d="M29 26 a 3 2 0 0 1 6 0" stroke="#000" stroke-width="1"/><path d="M26 20 h4 v2 h-4z m12 0 h4 v2 h-4z" fill="#ff8a80"/>`;
+
+    const oldWomanBase = (grinding = false) => {
+        const grindAnim = grinding ? `<rect x="48" y="25" width="4" height="40" fill="#9e9e9e"/><rect x="46" y="65" width="8" height="8" fill="#616161"/>` : '';
+        return `<svg width="300" height="400" viewBox="0 0 64 80" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><g transform="translate(0,10)"><rect x="22" y="30" width="20" height="30" fill="#8d6e63"/><rect x="26" y="20" width="12" height="10" fill="#f5e6d0"/><path d="M20 10 h24 v10 h-24 z m2 -2 h20 v2 h-20 z" fill="#e0e0e0"/><rect x="28" y="24" width="2" height="2" fill="#000"/><rect x="34" y="24" width="2" height="2" fill="#000"/><path d="M29 27 a2 1 0 0 0 6 0" stroke="#000" stroke-width="1"/><rect x="18" y="32" width="4" height="12" fill="#f5e6d0"/><rect x="42" y="32" width="4" height="12" fill="#f5e6d0"/><rect x="24" y="60" width="6" height="8" fill="#4e342e"/><rect x="34" y="60" width="6" height="8" fill="#4e342e"/>${grindAnim}</g></svg>`;
+    };
+    
+    // 头像
+    // 【形象修改】 “霓老师”的形象已被替换
+    const headTeacher = `<svg width="100" height="100" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path d="M24 4 H40 V16 H24 Z" fill="#2D1B17"/> <path d="M32 2 H36 V14 H34 V16 H32 Z" fill="#AA00FF"/><path d="M8 6 H22 V20 H8 Z" fill="#3E2723"/> <path d="M11 9 H19 V17 H11 Z" fill="#CE93D8"/><path d="M42 6 H56 V20 H42 Z" fill="#3E2723"/> <path d="M45 9 H53 V17 H45 Z" fill="#CE93D8"/><path d="M12 20 H52 V46 H48 V48 H16 V46 H12 Z" fill="#3E2723"/> <path d="M22 36 H42 V48 H22 Z" fill="#FFECB3"/><path d="M12 20 H52 V32 H14 V22 H12 Z" fill="#F8BBD0" opacity="0.6"/> <path d="M12 20 H52 V22 H12 Z" fill="#F8BBD0"/><rect x="16" y="32" width="12" height="10" fill="#263238"/> <rect x="17" y="33" width="10" height="8" fill="#00BCD4"/> <rect x="19" y="34" width="6" height="6" fill="#006064"/> <rect x="17" y="33" width="4" height="4" fill="#FFF"/><rect x="36" y="32" width="12" height="10" fill="#263238"/> <rect x="37" y="33" width="10" height="8" fill="#00BCD4"/> <rect x="39" y="34" width="6" height="6" fill="#006064"/> <rect x="37" y="33" width="4" height="4" fill="#FFF"/><rect x="31" y="44" width="2" height="2" fill="#F06292"/></svg>`;
+    const headLiBai = `<svg width="100" height="100" viewBox="20 10 24 24" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect x="26" y="18" width="12" height="10" fill="#ffccbc"/><rect x="24" y="10" width="16" height="8" fill="#263238"/><rect x="29" y="22" width="2" height="2" fill="#000"/><rect x="33" y="22" width="2" height="2" fill="#000"/></svg>`;
+    const headOldWoman = `<svg width="100" height="100" viewBox="20 10 24 24" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect x="26" y="20" width="12" height="10" fill="#f5e6d0"/><path d="M20 10 h24 v10 h-24 z m2 -2 h20 v2 h-20 z" fill="#e0e0e0"/><rect x="28" y="24" width="2" height="2" fill="#000"/><rect x="34" y="24" width="2" height="2" fill="#000"/></svg>`;
+
+
+    const assets = {
+        bg: {
+            classroom: svgToUrl(bgClassroom),
+            academy: svgToUrl(bgAcademy),
+            stream: svgToUrl(bgStream),
+        },
+        char: {
+            liBaiIdle: svgToUrl(youngLiBaiBase(faceIdle)),
+            liBaiAnnoyed: svgToUrl(youngLiBaiBase(faceAnnoyed, true)),
+            liBaiLaugh: svgToUrl(youngLiBaiBase(faceLaugh)),
+            liBaiSurprised: svgToUrl(youngLiBaiBase(faceSurprised)),
+            liBaiDetermined: svgToUrl(youngLiBaiBase(faceDetermined)),
+            liBaiAshamed: svgToUrl(youngLiBaiBase(faceAshamed)),
+            oldWoman: svgToUrl(oldWomanBase()),
+            oldWomanGrind: svgToUrl(oldWomanBase(true)),
+        },
+        head: {
+            teacher: svgToUrl(headTeacher),
+            liBai: svgToUrl(headLiBai),
+            oldWoman: svgToUrl(headOldWoman),
+        }
+    };
+
+    let patience = 50;
+    
+    function updatePatience(change) {
+        patience += change;
+        if (patience < 0) patience = 0;
+        if (patience > 100) patience = 100;
+
+        const elVal = document.getElementById('patience-val');
+        const elChange = document.getElementById('patience-change');
+        
+        elVal.innerText = patience;
+        elVal.style.color = patience < 40 ? 'var(--danger)' : (patience > 60 ? 'var(--success)' : 'var(--highlight)');
+
+        if (change !== 0) {
+            elChange.innerText = change > 0 ? `+${change}` : `${change}`;
+            elChange.style.color = change > 0 ? 'var(--success)' : 'var(--danger)';
+            elChange.classList.remove('change-anim');
+            void elChange.offsetWidth;
+            elChange.classList.add('change-anim');
+        }
+    }
+    
+    const getEnding = () => {
+        if (patience >= 70) return 30; // 诗仙之路
+        if (patience >= 30) return 31; // 泯然众人
+        return 32; // 蹉跎岁月
+    };
+
+    const script = [
+        {
+            id: 1,
+            bg: assets.bg.classroom,
+            char: null,
+            head: assets.head.teacher,
+            hideStatus: true,
+            name: "霓老师",
+            text: "同学们好！今天我们将走进唐代大诗人李白的童年，体验著名的寓言故事——《铁杵磨成针》。",
+            next: 1.1
+        },
+        {
+            id: 1.1,
+            bg: assets.bg.classroom,
+            char: null,
+            head: assets.head.teacher,
+            hideStatus: true,
+            name: "霓老师",
+            text: "接下来，你将扮演少年李白。你的每个选择都会影响“耐心值”，并导向不同结局。准备好了吗？",
+            choices: [{ txt: "准备好了，开始体验！", to: 2 }]
+        },
+        // --- 第一幕 ---
+        {
+            id: 2,
+            bg: assets.bg.academy,
+            char: assets.char.liBaiAnnoyed,
+            anim: "anim-idle",
+            head: assets.head.liBai,
+            hideStatus: false,
+            showTitle: "第一幕：逃学的念头",
+            name: "少年李白",
+            text: "老师在前面讲着难懂的经书，听得我烦躁又厌倦...",
+            bubble: "唉，这些书太无聊了！真想出去玩啊……",
+            next: 2.1
+        },
+        {
+            id: 2.1,
+            bg: assets.bg.academy,
+            char: assets.char.liBaiAnnoyed,
+            anim: "anim-shake",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "机会来了！老师正转身在木板上写字，后门就在不远处... 我内心开始天人交战。",
+            choices: [
+                { txt: "A. 溜出去玩一会儿！", to: 3, action: () => updatePatience(-10), tip: "学习的枯燥让你不耐烦，你选择了短暂的逃离。" },
+                { txt: "B. 再坚持一下吧。", to: 4, action: () => updatePatience(+10), tip: "你成功抵制了诱惑，这需要极大的定力。耐心增加了。" }
+            ]
+        },
+        // --- 幕间过渡 (自动进行) ---
+        {
+            id: 3, // 选择A: 溜出去
+            bg: assets.bg.academy,
+            char: assets.char.liBaiIdle,
+            anim: "anim-run-out",
+            head: assets.head.liBai,
+            name: "系统",
+            text: "你蹑手蹑脚地从后门溜走了，奔向自由的天地。",
+            autoNext: 1200,
+            next: 5
+        },
+        {
+            id: 4, // 选择B: 坚持住
+            bg: assets.bg.academy,
+            char: assets.char.liBaiAnnoyed,
+            anim: "anim-idle",
+            head: assets.head.liBai,
+            name: "系统",
+            text: "你摇了摇头，强迫自己重新将目光聚焦在书本上，尽管内心依然痛苦。",
+            autoNext: 1500,
+            next: 5
+        },
+        // --- 第二幕 ---
+        {
+            id: 5,
+            bg: assets.bg.stream,
+            char: assets.char.liBaiIdle,
+            anim: "anim-idle",
+            head: assets.head.liBai,
+            showTitle: "第二幕：溪边相遇",
+            name: "少年李白",
+            text: "你逃出或短暂离开学堂后，最终还是来到了溪边散心。嗯？那位老婆婆在做什么？",
+            next: 5.1
+        },
+        {
+            id: 5.1,
+            bg: assets.bg.stream,
+            char: "DUAL_SCENE_OLD_WOMAN",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "老婆婆，您好。请问您在做什么呀？这根大铁杵，您一直在磨它，是有什么用吗？",
+            next: 6
+        },
+        {
+            id: 6,
+            bg: assets.bg.stream,
+            char: "DUAL_SCENE_OLD_WOMAN",
+            head: assets.head.oldWoman,
+            name: "老婆婆",
+            text: "（抬头看了你一眼，微笑着说）孩子，我在磨针。",
+            next: 7
+        },
+        {
+            id: 7,
+            bg: assets.bg.stream,
+            char: "DUAL_SCENE_OLD_WOMAN",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "（磨针？！这怎么可能...）",
+            choices: [
+                { txt: "A. “这怎么可能！？” (嘲笑)", to: 8, action: () => updatePatience(-15), tip: "你的轻浮与不屑显而易见。对需要漫长时间才能完成的事，你缺乏最基本的敬意。" },
+                { txt: "B. “磨针？您要做什么呢？” (好奇询问)", to: 9, action: () => updatePatience(+5), tip: "面对不解之事，你保持了好奇与尊重。这也是一种耐心。" }
+            ]
+        },
+        // --- 第三幕 ---
+        {
+            id: 8, // A.嘲笑
+            bg: assets.bg.stream,
+            char: assets.char.liBaiLaugh,
+            anim: "anim-shake",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "哈哈！这简直是天方夜谭！这么粗的铁杵怎么可能磨成细细的针呢！",
+            next: 10
+        },
+        {
+            id: 9, // B.好奇询问
+            bg: assets.bg.stream,
+            char: assets.char.liBaiSurprised,
+            anim: "anim-idle",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "真不可思议... 您磨针是要用来做什么特别的事情吗？一定需要很长时间吧？",
+            next: 10
+        },
+        {
+            id: 10,
+            bg: assets.bg.stream,
+            char: "DUAL_SCENE_OLD_WOMAN_GRIND",
+            showTitle: "第三幕：深刻的领悟",
+            head: assets.head.oldWoman,
+            name: "老婆婆",
+            text: "孩子，只要功夫下得深，铁杵也能磨成一根绣花针啊。读书也是一样的道理，只要坚持不懈，总有一天会豁然贯通的。",
+            next: 11
+        },
+        {
+            id: 11,
+            bg: assets.bg.stream,
+            char: assets.char.liBaiAshamed,
+            anim: "anim-idle",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "老婆婆的话像一道惊雷，让你幡然醒悟。看着她坚定的眼神，再想想自己半途而废的念头，你脸上感到一阵火辣辣的。",
+            next: 12
+        },
+        {
+            id: 12,
+            bg: assets.bg.stream,
+            char: assets.char.liBaiIdle,
+            anim: "anim-think",
+            head: assets.head.liBai,
+            name: "少年李白",
+            text: "我该怎么办？是回到书院，像老婆婆磨针一样坚持下去？还是就此放弃，享受一时的轻松？",
+            choices: [
+                { txt: "A. “老婆婆说得对，我得回去！”", to: 13, action: () => updatePatience(+20), tip: "你幡然醒悟！真正的成长，在于持之以恒。" },
+                { txt: "B. “道理是懂，但太难了…”", to: 14, action: () => updatePatience(-5), tip: "道理虽懂，但行动的决心却在摇摆。你离真正的改变还差一步。" }
+            ]
+        },
+        // --- 结局触发 (自动进行) ---
+        {
+            id: 13, // 决定回去
+            bg: assets.bg.stream,
+            char: assets.char.liBaiDetermined,
+            anim: "anim-run-back",
+            head: assets.head.liBai,
+            name: "系统",
+            text: "你向老婆婆深深一揖，然后转身，目光坚定地向书院跑去。",
+            dynamicNext: true,
+            autoNext: 1500,
+        },
+        {
+            id: 14, // 犹豫不决
+            bg: assets.bg.stream,
+            char: assets.char.liBaiIdle,
+            anim: "anim-shake",
+            head: assets.head.liBai,
+            name: "系统",
+            text: "你在溪边犹豫了许久。老婆婆的话虽然给了你触动，但坚持的痛苦让你望而却步，心中的决心在一点点消散...",
+            dynamicNext: true,
+            autoNext: 2000,
+        },
+        
+        // --- 结局 ---
+        { id: 30, bg: assets.bg.academy, char: assets.char.liBaiDetermined, anim: "anim-idle", ending: "【诗仙之路】\n你领悟了‘持之以恒’的真谛，从此勤学不辍。日复一日的积累，让你最终学贯古今，才华横溢，成为了名垂青史的‘诗仙’。", next: 99 },
+        { id: 31, bg: assets.bg.academy, char: assets.char.liBaiAnnoyed, anim: "anim-idle", ending: "【泯然众人】\n老婆婆的话让你受到了触动，但你时而努力，时而懈怠，终究未能坚持到底。你成为了一个有几分才华的普通人，离真正的‘诗仙’，终究是差了那一份百折不挠的恒心。", next: 99 },
+        { id: 32, bg: assets.bg.stream, char: assets.char.liBaiIdle, anim: "anim-run-out", ending: "【蹉跎岁月】\n你最终没有听从老婆婆的教诲，放弃了长远的成长。虽有天资，但缺乏恒心，最终一事无成，在悔恨与平庸中蹉跎了岁月。", next: 99 },
+
+        // --- 总结 ---
+        {
+            id: 99,
+            bg: assets.bg.classroom,
+            char: null,
+            head: assets.head.teacher,
+            hideStatus: true,
+            name: "霓老师",
+            text: "", // 动态生成
+            choices: [{ txt: "重新体验", action: () => restartGame() }]
+        }
+    ];
+
+    const els = {
+        scene: document.getElementById('scene-layer'),
+        char: document.getElementById('main-char'),
+        multiLayer: document.getElementById('multi-char-layer'),
+        extra1: document.getElementById('extra-char-1'),
+        portraitFrame: document.getElementById('portrait-frame'),
+        portrait: document.getElementById('portrait-img'),
+        name: document.getElementById('name-tag'),
+        text: document.getElementById('text-content'),
+        choices: document.getElementById('choices-box'),
+        next: document.getElementById('next-btn'),
+        box: document.getElementById('dialogue-area'),
+        statusBar: document.getElementById('status-bar'),
+        title: document.getElementById('chapter-title'),
+        bubble: document.getElementById('thought-bubble'),
+        endingLayer: document.getElementById('ending-layer'),
+        endingText: document.getElementById('ending-text'),
+    };
+
+    let typeInterval;
+
+    function render(id) {
+        const node = script.find(s => s.id === id);
+        if (!node) return;
+
+        // 动态设置总结语
+        if (id === 99) {
+            if (patience >= 70) {
+                node.text = "恭喜你！通过不懈的坚持，你最终成就了‘诗仙’的伟业。记住：只要功夫深，铁杵磨成针！";
+            } else if (patience >= 30) {
+                node.text = "看来，做到持之以恒并不容易。希望这次体验能让你明白，耐心和坚持是最宝贵的品质。";
+            } else {
+                node.text = "一时的顿悟如果没有长久的坚持，最终也可能归于平淡。希望这个故事能给你带来深刻的警示。";
+            }
+        }
+
+        renderBase(node, () => showControls(node));
+    }
+
+    function renderBase(node, onComplete) {
+        els.statusBar.style.display = node.hideStatus ? 'none' : 'flex';
+        els.endingLayer.style.display = 'none';
+        els.endingLayer.style.opacity = '0';
+        els.choices.innerHTML = '';
+        els.next.style.display = 'none';
+
+        if (node.bg) els.scene.style.backgroundImage = `url('${node.bg}')`;
+
+        if (node.showTitle) {
+            els.title.innerText = node.showTitle;
+            els.title.classList.remove('anim-title-show');
+            void els.title.offsetWidth;
+            els.title.classList.add('anim-title-show');
+        }
+
+        if (node.bubble) {
+            els.bubble.innerText = node.bubble;
+            els.bubble.style.display = 'block';
+            els.bubble.className = 'bubble anim-bubble-show';
+        } else {
+            els.bubble.style.display = 'none';
+        }
+
+        // 重置层
+        els.multiLayer.style.display = 'none';
+        els.char.style.display = 'none';
+        els.char.className = 'sprite';
+        els.extra1.className = 'sub-sprite';
+
+        // 特殊场景渲染
+        if (node.char === "DUAL_SCENE_OLD_WOMAN" || node.char === "DUAL_SCENE_OLD_WOMAN_GRIND") {
+            els.multiLayer.style.display = 'block';
+            els.extra1.src = assets.char.liBaiSurprised; // 李白总是好奇/惊讶的
+            els.extra1.style.left = '25%';
+            els.extra1.style.transform = 'translateX(-50%)';
+            els.extra1.style.display = 'block';
+
+            els.char.src = (node.char === "DUAL_SCENE_OLD_WOMAN_GRIND") ? assets.char.oldWomanGrind : assets.char.oldWoman;
+            els.char.style.left = '70%';
+            els.char.style.transform = 'translateX(-50%) scaleX(-1)';
+            els.char.style.display = 'block';
+            if (node.char === "DUAL_SCENE_OLD_WOMAN_GRIND") {
+                els.char.classList.add("anim-grind");
+            } else {
+                els.char.classList.add("anim-idle");
+            }
+        } else if (node.ending) {
+            els.char.src = node.char;
+            els.char.style.display = node.char ? 'block' : 'none';
+            if (node.char) els.char.classList.add(node.anim || 'anim-idle');
+            
+            setTimeout(() => {
+                els.endingLayer.style.display = 'flex';
+                els.endingText.innerText = node.ending;
+                setTimeout(() => els.endingLayer.style.opacity = '1', 50);
+            }, 1000);
+
+        } else if (node.char) {
+            els.char.src = node.char;
+            els.char.style.display = 'block';
+            if (node.anim) els.char.classList.add(node.anim);
+        }
+
+        if (node.head) {
+            els.portrait.src = node.head;
+            els.portraitFrame.style.visibility = 'visible';
+        } else {
+            els.portraitFrame.style.visibility = 'hidden';
+        }
+
+        els.name.innerText = node.name || "系统";
+        els.text.innerText = '';
+        let i = 0;
+        clearInterval(typeInterval);
+        
+        const completeTyping = () => {
+            clearInterval(typeInterval);
+            els.text.innerText = node.text;
+            onComplete();
+            i = node.text.length + 1;
+        };
+        
+        els.box.onclick = null; // 重置点击事件
+        if (!node.autoNext) {
+            els.box.onclick = () => {
+                if (i <= node.text.length) {
+                    completeTyping();
+                } else if (node.next) {
+                    render(node.next);
+                } else if (node.dynamicNext) {
+                    render(getEnding());
+                }
+            };
+        } else {
+            // 自动过渡场景
+            setTimeout(() => {
+                if (node.dynamicNext) {
+                    render(getEnding());
+                } else {
+                    render(node.next);
+                }
+            }, node.autoNext);
+        }
+
+        typeInterval = setInterval(() => {
+            if (i >= node.text.length) {
+                completeTyping();
+            } else {
+                els.text.innerText += node.text.charAt(i);
+                i++;
+            }
+        }, 30);
+    }
+
+    function showControls(node) {
+        if (node.choices) {
+            node.choices.forEach(c => {
+                let btn = document.createElement('button');
+                btn.className = 'pixel-btn';
+                btn.innerText = c.txt;
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (c.action) c.action();
+                    if(c.tip) {
+                        els.name.innerText = "系统提示";
+                        els.text.innerText = c.tip;
+                        els.choices.innerHTML = '';
+                        els.next.style.display = 'block';
+                        els.box.onclick = () => render(c.to);
+                    } else {
+                        render(c.to);
+                    }
+                };
+                els.choices.appendChild(btn);
+            });
+        } else if (!node.autoNext && (node.next || node.dynamicNext || node.ending)) {
+            els.next.style.display = 'block';
+        }
+    }
+
+    window.restartGame = function() {
+        patience = 50;
+        updatePatience(0);
+        render(1);
+    }
+    
+    window.onload = () => render(1);
+
+</script>
+</body>
+</html>
